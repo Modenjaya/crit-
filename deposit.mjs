@@ -135,7 +135,7 @@ async function execTxCompat(sui, kp, tx) {
   if (sim.effects?.status?.status !== 'success') {
     log.warn('[warn] dryRun status != success', JSON.stringify(sim.effects?.status || {}));
 _ } else {
-_     log.info('[info] dryRun status: success');
+    log.info('[info] dryRun status: success');
   }
 
   const opt = { showEffects: true, showEvents: true, showBalanceChanges: true };
