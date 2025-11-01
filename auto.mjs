@@ -76,9 +76,10 @@ function num(v, d=0){ const n = Number(v); return Number.isFinite(n) ? n : d; }
 function int(v, d=0){ const n = parseInt(v ?? '', 10); return Number.isFinite(n) ? n : d; }
 function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 function truthy(v){ return ['1','true','yes','y','on'].includes(String(v||'').toLowerCase()); }
-// === [MODIFIKASI] Tambah fungsi untuk mengambil semua key ===
+// === [MODIFIKASI KRITIS: Mengakomodasi PRIVATE_KEYS atau SUI_PRIVATE_KEY] ===
 function getAllPrivateKeys(){
-  const keysString = process.env.PRIVATE_KEYS;
+  // Cek SUI_PRIVATE_KEY jika PRIVATE_KEYS tidak ada (untuk kompatibilitas)
+  const keysString = process.env.PRIVATE_KEYS || process.env.SUI_PRIVATE_KEY; 
   if (!keysString) return [];
   return keysString
     .split(',').map(key => key.trim()).filter(Boolean);
@@ -117,10 +118,10 @@ function mapKeyToPhase(keyLower){
   return null;
 }
 
-// === [MODIFIKASI] execCapture menerima envAdd ===
+// === [MODIFIKASI: execCapture menerima envAdd] ===
 async function execCapture(cmd, timeoutMs=0, envAdd={}){
   return new Promise((resolve, reject) => {
-    const fullEnv = { ...process.env, ...envAdd };
+    const fullEnv = { ...process.env, ...envAdd };
     const p = spawn(cmd, { shell: true, env: fullEnv }); // Gunakan fullEnv
     let out = '', err = '';
     let killedByTimeout = false;
@@ -149,16 +150,16 @@ async function execCapture(cmd, timeoutMs=0, envAdd={}){
   });
 }
 
-// === [MODIFIKASI] runCmd menerima envAdd ===
+// === [MODIFIKASI: runCmd menerima envAdd] ===
 async function runCmd(cmd, timeoutMs=0, envAdd={}){
   return new Promise((resolve, reject) => {
     log.info('$', cmd);
-    const fullEnv = { ...process.env, ...envAdd };
-    const p = spawn(cmd, { 
-        stdio: 'inherit', 
-        shell: true,
-        env: fullEnv // Gunakan fullEnv
-    });
+    const fullEnv = { ...process.env, ...envAdd };
+    const p = spawn(cmd, { 
+        stdio: 'inherit', 
+        shell: true,
+        env: fullEnv // Gunakan fullEnv
+    });
 
     let killedByTimeout = false;
     let to = null;
@@ -184,13 +185,13 @@ async function runCmd(cmd, timeoutMs=0, envAdd={}){
   });
 }
 
-// === [MODIFIKASI] runOneAttempt menerima privateKey ===
-async function runOneAttempt(ph, privateKey){ 
-    // Teruskan PRIVATE_KEY sebagai environment variable ke child process
-    return runCmd(CMDS[ph], TIMEOUTS[ph] || 0, { PRIVATE_KEY: privateKey }); 
+// === [MODIFIKASI: runOneAttempt menerima privateKey] ===
+async function runOneAttempt(ph, privateKey){ 
+    // Teruskan PRIVATE_KEY sebagai environment variable ke child process
+    return runCmd(CMDS[ph], TIMEOUTS[ph] || 0, { PRIVATE_KEY: privateKey }); 
 }
 
-// === [MODIFIKASI] runWithRetries menerima privateKey ===
+// === [MODIFIKASI: runWithRetries menerima privateKey] ===
 async function runWithRetries(ph, retryMax, privateKey){
   let attempt = 0;
   let errLast = null;
@@ -200,7 +201,7 @@ async function runWithRetries(ph, retryMax, privateKey){
     attempt++;
     try {
       log.debug(`[${ph}] attempt ${attempt}/${Math.max(1, retryMax)}`);
-      // Teruskan privateKey
+      // Teruskan privateKey
       await runOneAttempt(ph, privateKey);
       return { ok: true, attempts: attempt, error: null };
     } catch (e) {
@@ -219,9 +220,9 @@ async function runWithRetries(ph, retryMax, privateKey){
   return { ok: false, attempts: attempt, error: errLast };
 }
 
-// === [MODIFIKASI] detectTimesFromPoint menerima privateKey ===
+// === [MODIFIKASI: detectTimesFromPoint menerima privateKey] ===
 async function detectTimesFromPoint(privateKey){
-  // Teruskan privateKey ke execCapture
+  // Teruskan privateKey ke execCapture
   const out = await execCapture(POINT_CMD, TIMEOUTS.point || 0, { PRIVATE_KEY: privateKey });
   const lines = out.split(/\r?\n/);
 
@@ -252,7 +253,7 @@ async function detectTimesFromPoint(privateKey){
   return timesMap;
 }
 
-// === [MODIFIKASI] runPhase menerima privateKey ===
+// === [MODIFIKASI: runPhase menerima privateKey] ===
 async function runPhase(ph, repsTarget, successDelay, retryMax, privateKey){
   if (!CMDS[ph]) {
     log.warn(`skip unknown phase: ${ph}`);
@@ -273,7 +274,7 @@ async function runPhase(ph, repsTarget, successDelay, retryMax, privateKey){
     repsTried++;
     log.info(`[${ph}] repetition ${repsSuccess + 1}/${repsTarget}`);
 
-    // Teruskan privateKey
+    // Teruskan privateKey
     const res = await runWithRetries(ph, retryMax, privateKey);
     if (res.ok) {
       repsSuccess++;
@@ -292,9 +293,9 @@ async function runPhase(ph, repsTarget, successDelay, retryMax, privateKey){
   return { ok: phaseOk, tries: repsTried, repsSuccess, repsTarget, error: phaseOk ? null : lastErr };
 }
 
-// === [MODIFIKASI] Logika Utama dibungkus dengan loop Multi-Akun ===
+// === [MODIFIKASI: Logika Utama dibungkus dengan loop Multi-Akun] ===
 (async () => {
-  const ALL_KEYS = getAllPrivateKeys();
+  const ALL_KEYS = getAllPrivateKeys();
   if (ALL_KEYS.length === 0) {
     log.error('FATAL: PRIVATE_KEYS not found or empty in .env');
     process.exit(1);
@@ -305,98 +306,98 @@ async function runPhase(ph, repsTarget, successDelay, retryMax, privateKey){
   const allResults = [];
   let globalSuccess = true;
 
-  // === START LOOP MULTI-AKUN ===
+  // === START LOOP MULTI-AKUN ===
   for (let i = 0; i < ALL_KEYS.length; i++) {
     const privateKey = ALL_KEYS[i];
-    // Gunakan 12 karakter pertama key sebagai ID unik untuk file state harian
-    const ADDR_KEY = privateKey.slice(0, 12); 
+    // Gunakan 12 karakter pertama key sebagai ID unik untuk file state harian
+    const ADDR_KEY = privateKey.slice(0, 12); 
 
     console.log('\n' + '='.repeat(60));
     log.info(`[AKUN ${i + 1}/${ALL_KEYS.length}] Memproses key: ${ADDR_KEY}...`);
     console.log('='.repeat(60));
 
-    // 1) Deteksi remaining dari point.mjs (dengan private key akun saat ini)
-    let timesDetected = null;
-    if (DETECT_FROM_POINTS) {
-      try { 
-          // Teruskan privateKey
-          timesDetected = await detectTimesFromPoint(privateKey); 
-        }
-      catch (e) { log.warn('[detect] gagal membaca point.mjs:', e?.message || e); timesDetected = null; }
-    }
+    // 1) Deteksi remaining dari point.mjs (dengan private key akun saat ini)
+    let timesDetected = null;
+    if (DETECT_FROM_POINTS) {
+      try { 
+          // Teruskan privateKey
+          timesDetected = await detectTimesFromPoint(privateKey); 
+        }
+      catch (e) { log.warn('[detect] gagal membaca point.mjs:', e?.message || e); timesDetected = null; }
+    }
 
-    // 2) Tentukan target repetitions per phase
-    const targetTimes = {};
-    const st = DAILY_ENSURE_TX ? loadState() : {};
-    const today = todayJakarta();
+    // 2) Tentukan target repetitions per phase
+    const targetTimes = {};
+    const st = DAILY_ENSURE_TX ? loadState() : {};
+    const today = todayJakarta();
 
-    for (const ph of PHASES_CFG) {
-      let t = 0;
-      if (timesDetected && ph in timesDetected) {
-        t = timesDetected[ph] || 0;
-      } else {
-        const envKey = `TIMES_${ph.toUpperCase()}`;
-        t = int(process.env[envKey], 1);
-      }
+    for (const ph of PHASES_CFG) {
+      let t = 0;
+      if (timesDetected && ph in timesDetected) {
+        t = timesDetected[ph] || 0;
+      } else {
+        const envKey = `TIMES_${ph.toUpperCase()}`;
+        t = int(process.env[envKey], 1);
+      }
 
-      // === DAILY ENSURE: pakai ADDR_KEY
-      if (DAILY_ENSURE_TX && DAILY_PHASES.includes(ph) && !hasDailyDone(st, today, ph, ADDR_KEY)) {
-        if (t < DAILY_MIN_TX) {
-          log.info(`[daily] enforce: ${ph} set to at least ${DAILY_MIN_TX} for ${today}`);
-          t = DAILY_MIN_TX;
-        }
-      }
+      // === DAILY ENSURE: pakai ADDR_KEY
+      if (DAILY_ENSURE_TX && DAILY_PHASES.includes(ph) && !hasDailyDone(st, today, ph, ADDR_KEY)) {
+        if (t < DAILY_MIN_TX) {
+          log.info(`[daily] enforce: ${ph} set to at least ${DAILY_MIN_TX} for ${today}`);
+          t = DAILY_MIN_TX;
+        }
+      }
 
-      targetTimes[ph] = t;
-    }
+      targetTimes[ph] = t;
+    }
 
-    log.info(`[${ADDR_KEY}] Auto runner — phases:`, PHASES_CFG.join(' -> '));
-    log.info(`[${ADDR_KEY}] Target repetitions:`, JSON.stringify(targetTimes));
+    log.info(`[${ADDR_KEY}] Auto runner — phases:`, PHASES_CFG.join(' -> '));
+    log.info(`[${ADDR_KEY}] Target repetitions:`, JSON.stringify(targetTimes));
 
-    const accountResults = [];
+    const accountResults = [];
 
-    // 3) Run tiap phase sesuai repsTarget
-    for (const ph of PHASES_CFG) {
-      const retryMax = PER_PHASE_RETRY[ph] ?? RETRY_GLOBAL_MAX;
-      const successDelay = successDelayFor(ph);
-      const repsTarget = targetTimes[ph] ?? 0;
+    // 3) Run tiap phase sesuai repsTarget
+    for (const ph of PHASES_CFG) {
+      const retryMax = PER_PHASE_RETRY[ph] ?? RETRY_GLOBAL_MAX;
+      const successDelay = successDelayFor(ph);
+      const repsTarget = targetTimes[ph] ?? 0;
 
-      // Teruskan privateKey
-      const res = await runPhase(ph, repsTarget, successDelay, retryMax, privateKey);
-      accountResults.push({ phase: ph, ...res });
+      // Teruskan privateKey
+      const res = await runPhase(ph, repsTarget, successDelay, retryMax, privateKey);
+      accountResults.push({ phase: ph, ...res });
 
-      // === DAILY ENSURE: pakai ADDR_KEY
-      if (DAILY_ENSURE_TX && res.repsSuccess > 0 && DAILY_PHASES.includes(ph)) {
-        markDailyDone(st, today, ph, ADDR_KEY);
-        saveState(st);
-        log.info(`[daily] marked done: ${ph} @ ${today} for ${ADDR_KEY}`);
-      }
+      // === DAILY ENSURE: pakai ADDR_KEY
+      if (DAILY_ENSURE_TX && res.repsSuccess > 0 && DAILY_PHASES.includes(ph)) {
+        markDailyDone(st, today, ph, ADDR_KEY);
+        saveState(st);
+        log.info(`[daily] marked done: ${ph} @ ${today} for ${ADDR_KEY}`);
+      }
 
-      if (!res.ok) {
-        globalSuccess = false; // Tandai jika ada kegagalan
-        log.warn(`[${ADDR_KEY}] SKIP: Phase "${ph}" failed (${res.repsSuccess}/${res.repsTarget}) → lanjut…`);
-        if (STOP_ON_FAIL) {
-          log.error(`[${ADDR_KEY}] STOP_ON_FAIL=1 → menghentikan run untuk akun ini.`);
-          break; // Hentikan loop phase untuk akun ini
-        }
-      }
+      if (!res.ok) {
+        globalSuccess = false; // Tandai jika ada kegagalan
+        log.warn(`[${ADDR_KEY}] SKIP: Phase "${ph}" failed (${res.repsSuccess}/${res.repsTarget}) → lanjut…`);
+        if (STOP_ON_FAIL) {
+          log.error(`[${ADDR_KEY}] STOP_ON_FAIL=1 → menghentikan run untuk akun ini.`);
+          break; // Hentikan loop phase untuk akun ini
+        }
+      }
 
-      const d = DELAYS[ph] || 0;
-      if (d > 0) {
-        log.info(`[${ADDR_KEY}] delay ${d}ms setelah phase ${ph}...`);
-        await sleep(d);
-      }
-    }
+      const d = DELAYS[ph] || 0;
+      if (d > 0) {
+        log.info(`[${ADDR_KEY}] delay ${d}ms setelah phase ${ph}...`);
+        await sleep(d);
+      }
+    }
 
-    allResults.push({ key: ADDR_KEY, results: accountResults });
+    allResults.push({ key: ADDR_KEY, results: accountResults });
 
-    // Jeda antar akun
-    if (i < ALL_KEYS.length - 1) {
-        log.info(`\n[GLOBAL] Jeda ${ACCOUNT_DELAY_MS}ms sebelum akun berikutnya...`);
-        await sleep(ACCOUNT_DELAY_MS);
-    }
-  }
-  // === END LOOP MULTI-AKUN ===
+    // Jeda antar akun
+    if (i < ALL_KEYS.length - 1) {
+        log.info(`\n[GLOBAL] Jeda ${ACCOUNT_DELAY_MS}ms sebelum akun berikutnya...`);
+        await sleep(ACCOUNT_DELAY_MS);
+    }
+  }
+  // === END LOOP MULTI-AKUN ===
 
   printGlobalSummary(allResults, globalSuccess);
   process.exit(globalSuccess ? 0 : 1); // Exit 0 jika semua sukses, 1 jika ada kegagalan
@@ -422,5 +423,5 @@ function printGlobalSummary(allResults, globalSuccess){
 
 // Fungsi ini tidak lagi digunakan, digantikan oleh printGlobalSummary
 function printSummary(results){
-  /* Dibiarkan kosong */
+  /* Dibiarkan kosong */
 }
