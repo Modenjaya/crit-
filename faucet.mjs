@@ -64,7 +64,6 @@ function fmtAmount(raw, decimals = 6) {
 const sui = new SuiClient({ url: FULLNODE });
 
 /* =================== Discovery & Preflight Helpers ========================== */
-// ... (Tidak ada perubahan dari Baris 69 hingga 333) ...
 function coinTypeFromEnvOrGuess({ pkg, module, coinType }) {
   if (coinType && coinType.includes('::')) return coinType;
   const struct = module.toUpperCase(); // ex: usdc -> USDC
@@ -273,11 +272,11 @@ async function execWithGasRetry({ label, tx, txBytes, signer, address }) {
     tx.setGasPayment([{ objectId: gas.objectId, version: gas.version, digest: gas.digest }]);
     const bytes = await tx.build({ client: sui });
     return await signAndExecuteCompat({ tx, txBytes: bytes, signer });
-G }
+  }
 }
 
 /* ================================ RUN ONE =================================== */
-async function runOneCoin({ label, cfg, address, kp }) { // [MODIFIKASI] Tambah 'kp'
+async function runOneCoin({ label, cfg, address, kp }) { 
   // Pastikan package ada
   try {
     const pkgObj = await sui.getObject({ id: cfg.pkg, options: { showType: true } });
@@ -297,7 +296,7 @@ async function runOneCoin({ label, cfg, address, kp }) { // [MODIFIKASI] Tambah 
   log.info(`[${label}] Treasury :`, cfg.treas || '(auto-discover)');
   log.info(`[${label}] Type     :`, cfg.coinType, 'dec:', decimals);
   log.info(`[${label}] Amount   :`, amountRaw.toString(), `(~ ${fmtAmount(amountRaw.toString(), decimals)} ${label.toUpperCase()})`);
-s  // Treasury preflight / discovery
+  // Treasury preflight / discovery
   let treInfo = null;
   if (cfg.treas) {
     try {
@@ -315,7 +314,7 @@ s  // Treasury preflight / discovery
     log.info(`[${label}] ditemukan kandidat treasury: ${found.id}`);
     log.info(`[${label}]   type  : ${found.type}`);
     log.info(`[${label}]   owner : ${describeOwner(found.owner)}`);
-     if (cfg.mustShared && !found.owner?.Shared) {
+    if (cfg.mustShared && !found.owner?.Shared) { // [PERBAIKAN] Menghapus karakter 'm' yang menyebabkan SyntaxError di log sebelumnya
       throw new Error(`[${label}] ditemukan cap/treasury tapi BUKAN Shared (admin-only).`);
     }
     cfg.treas = found.id;
@@ -341,7 +340,7 @@ s  // Treasury preflight / discovery
     txBytes = await tx.build({ client: sui });
   } catch (e) {
     throw new Error(`[${label}] build() gagal: ${e?.message || e}`);
-A }
+  }
   let dry;
   try {
     dry = await sui.dryRunTransactionBlock({ transactionBlock: txBytes });
@@ -362,11 +361,11 @@ A }
   }
   if (MODE === 'dryrun') {
     log.info(`[${label}] [MODE=dryrun] stop di sini.`);
-A   return;
+    return;
   }
   if (st !== 'success') throw new Error(`[${label}] dryRun fail: ${err || st}`);
   // EXECUTE — compat + retry gas version
-  const exec = await execWithGasRetry({ label, tx, txBytes, signer: kp, address }); // [MODIFIKASI] 'kp' dilewatkan
+  const exec = await execWithGasRetry({ label, tx, txBytes, signer: kp, address }); // 'kp' dilewatkan
   const digest = exec.digest ?? exec.transactionDigest;
   // Effects mungkin kosong, refetch
   let effects = exec.effects;
@@ -385,7 +384,7 @@ A   return;
   log.info(`[${label}] execute digest:`, digest);
   log.info(`[${label}] execute status:`, effSt, effErr || '');
   if (effSt !== 'success') throw new Error(`[${label}] EXECUTE FAILED: ${effErr || 'unknown error'}`);
-source_   const events = exec.events || [];
+   const events = exec.events || [];
   if (events.length) {
     log.info(`[${label}] events:`);
     for (const ev of events) log.info('  -', ev.type, ev.parsedJson ? JSON.stringify(ev.parsedJson) : '');
@@ -406,27 +405,20 @@ source_   const events = exec.events || [];
 
 /* =================================== MAIN =================================== */
 
-// [MODIFIKASI 3] Pindahkan key parsing ke dalam 'run' agar error tertangkap
-// const { kp, scheme } = parsePrivKey(SUI_PK_RAW);
-// const address = kp.getPublicKey().toSuiAddress();
-// log.info('== Faucet Direct (fullnode only) ==');
-// log.info('Fullnode :', FULLNODE);
-// log.info('Key type :', scheme);
-// log.info('Address  :', address);
-// log.info('Mode     :', MODE);
-// log.info('Claim    :', CLAIM_MODE);
-
 const run = async () => {
-  // [MODIFIKASI 3] Logika key parsing dan log awal dipindah ke sini
-  const { kp, scheme } = parsePrivKey(SUI_PK_RAW);
-  const address = kp.getPublicKey().toSuiAddress();
+  // [MODIFIKASI 3] Logika key parsing dan log awal dipindah ke sini
+  if (!SUI_PK_RAW) {
+        throw new Error('FATAL: PRIVATE_KEY atau SUI_PRIVATE_KEY kosong di environment.');
+    }
+  const { kp, scheme } = parsePrivKey(SUI_PK_RAW);
+  const address = kp.getPublicKey().toSuiAddress();
 
-  log.info('== Faucet Direct (fullnode only) ==');
-  log.info('Fullnode :', FULLNODE);
-  log.info('Key type :', scheme);
-  log.info('Address  :', address);
-  log.info('Mode     :', MODE);
-  log.info('Claim    :', CLAIM_MODE);
+  log.info('== Faucet Direct (fullnode only) ==');
+  log.info('Fullnode :', FULLNODE);
+  log.info('Key type :', scheme);
+  log.info('Address  :', address);
+  log.info('Mode     :', MODE);
+  log.info('Claim    :', CLAIM_MODE);
 
   const usdcCfg = (() => { try { return getCoinCfg('usdc'); } catch { return null; } })();
   const xaumCfg = (() => { try { return getCoinCfg('xaum'); } catch { return null; } })();
