@@ -315,7 +315,7 @@ s  // Treasury preflight / discovery
     log.info(`[${label}] ditemukan kandidat treasury: ${found.id}`);
     log.info(`[${label}]   type  : ${found.type}`);
     log.info(`[${label}]   owner : ${describeOwner(found.owner)}`);
-  m   if (cfg.mustShared && !found.owner?.Shared) {
+     if (cfg.mustShared && !found.owner?.Shared) {
       throw new Error(`[${label}] ditemukan cap/treasury tapi BUKAN Shared (admin-only).`);
     }
     cfg.treas = found.id;
