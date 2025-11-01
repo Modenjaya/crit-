@@ -3,7 +3,7 @@
 // Patched: accept SUI_PRIVATE_KEY / PRIVATE_KEY / PRIVATE_KEY_HEX and SUI_FULLNODE / FULLNODE_URL.
 // Supports ed25519 & secp256k1, various key encodings, and both new/old Sui SDK execute APIs.
 
-// [MODIFIKASI] Dihapus/komentar agar tidak menimpa PRIVATE_KEY dari auto.mjs
+// [WAJIB] Dihapus/komentar agar tidak menimpa PRIVATE_KEY dari auto.mjs
 // import 'dotenv/config'; 
 
 import { SuiClient, getFullnodeUrl } from '@mysten/sui/client';
@@ -28,8 +28,7 @@ const FULLNODE =
   process.env.FULLNODE_URL ||
   getFullnodeUrl('testnet');
 
-// Skrip ini sudah benar. 
-// RAW_PK akan mengambil PRIVATE_KEY yang diberikan oleh auto.mjs
+// Skrip ini sudah benar karena mencari PRIVATE_KEY yang dikirim auto.mjs
 const RAW_PK =
   String(process.env.SUI_PRIVATE_KEY || process.env.PRIVATE_KEY || process.env.PRIVATE_KEY_HEX || '').trim();
 
@@ -134,8 +133,8 @@ async function execTxCompat(sui, kp, tx) {
   const sim = await sui.dryRunTransactionBlock({ transactionBlock: built });
   if (sim.effects?.status?.status !== 'success') {
     log.warn('[warn] dryRun status != success', JSON.stringify(sim.effects?.status || {}));
-_ } else {
-    log.info('[info] dryRun status: success');
+  } else {
+    log.info('[info] dryRun status: success'); // [PERBAIKAN] Menghapus karakter '_'
   }
 
   const opt = { showEffects: true, showEvents: true, showBalanceChanges: true };
@@ -154,10 +153,10 @@ _ } else {
 
 // ---------- MAIN ----------
 (async () => {
-  // Cek jika RAW_PK kosong (penting)
-  if (!RAW_PK) {
-    throw new Error('FATAL: PRIVATE_KEY tidak ditemukan di environment. Skrip ini harus dijalankan oleh auto.mjs.');
-  }
+  // Cek jika RAW_PK kosong (penting)
+  if (!RAW_PK) {
+    throw new Error('FATAL: PRIVATE_KEY tidak ditemukan di environment. Skrip ini harus dijalankan oleh auto.mjs.');
+  }
 
   const { kp, scheme } = parsePrivKey(RAW_PK);
   const client = new SuiClient({ url: FULLNODE });
@@ -206,7 +205,7 @@ _ } else {
 
     const version = tx.object(VERSION_ID);
     const market  = tx.object(MARKET_ID);
-_     const grCoin  = tx.object(biggest.coinObjectId);
+    const grCoin  = tx.object(biggest.coinObjectId); // [PERBAIKAN] Menghapus karakter '_'
 
     const [obligation, obligationKey, hotPotato] = tx.moveCall({
       target: '0x8cee41afab63e559bc236338bfd7c6b2af07c9f28f285fc8246666a7ce9ae97a::open_obligation::open_obligation',
@@ -223,9 +222,8 @@ _     const grCoin  = tx.object(biggest.coinObjectId);
 
     tx.transferObjects([obligationKey], tx.pure.address(sender));
 
-  t_x.moveCall({
+    tx.moveCall({ // [PERBAIKAN] Mengubah t_x menjadi tx
       target: '0x8cee41afab63e559bc236338bfd7c6b2af07c9f28f285fc8246666a7ce9ae97a::open_obligation::return_obligation',
-Click to copy
       arguments: [version, obligation, hotPotato],
     });
 
@@ -240,11 +238,11 @@ Click to copy
       if (status === 'success') {
         const evts = res.events || [];
         if (evts.length) {
-source_         log.info('[info] events:');
+         log.info('[info] events:');
           for (const e of evts) log.info('  -', e.type, e.parsedJson || e);
         }
-        // Sukses, biarkan skrip berakhir secara normal (exit code 0)
-        return; 
+        // Sukses, biarkan skrip berakhir secara normal (exit code 0)
+        return; 
       }
 
       const abort =
@@ -264,7 +262,7 @@ source_         log.info('[info] events:');
 
       throw new Error(msgStr || 'Tx gagal tanpa detail.');
 
-section     } catch (e) {
+    } catch (e) {
       const msg = e?.message || String(e);
       if (msg.includes('1793')) {
         log.warn('[warn] Market penuh (1793). Turunkan amount & retry…');
@@ -275,16 +273,16 @@ section     } catch (e) {
         continue;
       }
       log.error('FATAL:', msg);
-      // Gagal, keluar dengan kode 1 agar auto.mjs tahu
-Source       process.exit(1);
+      // Gagal, keluar dengan kode 1 agar auto.mjs tahu
+      process.exit(1);
     }
   }
 
   log.error(`FATAL: Gagal deposit setelah ${MAX_RETRY} attempt.`);
-  // Gagal, keluar dengan kode 1 agar auto.mjs tahu
+  // Gagal, keluar dengan kode 1 agar auto.mjs tahu
   process.exit(1);
 })().catch(e => {
   log.error('FATAL:', e.message);
-  // Gagal, keluar dengan kode 1 agar auto.mjs tahu
+  // Gagal, keluar dengan kode 1 agar auto.mjs tahu
   process.exit(1);
 });
